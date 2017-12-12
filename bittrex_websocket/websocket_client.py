@@ -22,7 +22,13 @@ from ._queue_events import SubscribeInternalEvent, ConnectEvent, DisconnectEvent
     SnapshotEvent
 from .constants import *
 
-logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+handler = logging.StreamHandler()
+handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter(logging.BASIC_FORMAT)
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 try:
     import Queue as queue
@@ -262,11 +268,11 @@ class BittrexSocket(WebSocket):
         conn, corehub = conn_obj.conn, conn_obj.corehub
         for url in self.url:
             try:
-                logging.debug('Trying to establish connection to Bittrex through {}.'.format(url))
+                logger.debug('Trying to establish connection to Bittrex through {}.'.format(url))
                 conn.url = url
                 conn.start()
                 conn_obj.activate()
-                logging.debug('Connection to Bittrex established successfully through {}.'.format(url))
+                logger.debug('Connection to Bittrex established successfully through {}.'.format(url))
                 # Add handlers
                 corehub.client.on('updateExchangeState', self._on_tick_update)
                 corehub.client.on('updateSummaryState', self._on_ticker_update)
@@ -276,11 +282,11 @@ class BittrexSocket(WebSocket):
                 if conn_obj.close_me is True:
                     return
             except HTTPError:
-                logging.debug('Failed to establish connection through {}'.format(url))
+                logger.debug('Failed to establish connection through {}'.format(url))
             except MissingSchema:
-                logging.debug('Invalid URL: {}'.format(url))
+                logger.debug('Invalid URL: {}'.format(url))
         else:
-            logging.debug('Failed to establish connection to Bittrex through all supplied URLS. Closing the socket')
+            logger.debug('Failed to establish connection to Bittrex through all supplied URLS. Closing the socket')
             return
 
     def _handle_disconnect(self, disconn_event):
@@ -307,11 +313,11 @@ class BittrexSocket(WebSocket):
         # We set a close_me flag so that next time when a message is received
         # from the thread that started the connection, a method will be called to close it.
         for conn in conns:
-            logging.debug(msg)
+            logger.debug(msg)
             conn.close()
             while conn.state:
                 sleep(0.5)
-            logging.debug('Connection {} has been successfully closed.'.format(conn.id))
+            logger.debug('Connection {} has been successfully closed.'.format(conn.id))
         return flag
 
     def _handle_subscribe(self, sub_event):
@@ -333,7 +339,7 @@ class BittrexSocket(WebSocket):
             sleep(0.2)
             timeout += 1
             if timeout >= 100:
-                logging.debug(
+                logger.debug(
                     'Failed to subscribe [{}][{}] from connection {} after 20 seconds. '
                     'The connection is probably down.'.format(sub_type, tickers, conn.id))
                 return
@@ -400,7 +406,7 @@ class BittrexSocket(WebSocket):
             sleep(0.1)
         else:
             try:
-                logging.debug('[Subscription][{}][{}]: Order book snapshot '
+                logger.debug('[Subscription][{}][{}]: Order book snapshot '
                               'requested.'.format(SUB_TYPE_ORDERBOOK, ticker))
                 conn.corehub.server.invoke(method, ticker)
                 self.tickers.set_snapshot_state(ticker, SNAPSHOT_SENT)
@@ -479,7 +485,7 @@ class BittrexSocket(WebSocket):
             # Check for already existing tickers and enable the subscription before opening a new connection.
             for ticker in tickers:
                 if self.tickers.get_sub_state(ticker, sub_type) is SUB_STATE_ON:
-                    logging.debug('{} subscription is already enabled for {}. Ignoring...'.format(sub_type, ticker))
+                    logger.debug('{} subscription is already enabled for {}. Ignoring...'.format(sub_type, ticker))
                 else:
                     # Assign most suitable connection
                     events = self._assign_conn(ticker, sub_type)
@@ -546,7 +552,7 @@ class BittrexSocket(WebSocket):
             non_active = set(self.connections) - set(active_conns)
             if non_active:
                 for conn in non_active:
-                    logging.debug('Connection {} has no active subscriptions. Closing it...'.format(conn))
+                    logger.debug('Connection {} has no active subscriptions. Closing it...'.format(conn))
                     conn_object = self.connections[conn]
                     disconnect_event = DisconnectEvent(conn_object)
                     self.control_queue.put(disconnect_event)
@@ -755,7 +761,7 @@ class BittrexSocket(WebSocket):
                         self.order_books[ticker['Name']] = msg['R']
                         self.tickers.set_snapshot_state(ticker['Name'], SNAPSHOT_RCVD)
                         break
-                logging.debug(
+                logger.debug(
                     '[Subscription][{}][{}]: Order book snapshot received.'.format(SUB_TYPE_ORDERBOOK,
                                                                                    msg['R']['MarketName']))
 
