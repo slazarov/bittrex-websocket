@@ -279,13 +279,17 @@ class BittrexSocket(WebSocket):
         """
 
         def get_url(url_list):
-            result = next(url_list)
+            result = url_list[get_url.counter]
+            get_url.counter += 1
+            if get_url.counter == len(url_list):
+                get_url.counter = 0
             return result
+        get_url.counter = 0
 
         urls = ['https://socket-stage.bittrex.com/signalr',
                 'https://socket.bittrex.com/signalr']
-        url_gen = (url for url in urls)
-        url = next(url_gen)
+
+        url = get_url(urls)
         conn, corehub = conn_obj.conn, conn_obj.corehub
 
         while True:
@@ -299,7 +303,7 @@ class BittrexSocket(WebSocket):
                     # Add handlers
                     corehub.client.on('updateExchangeState', self._on_tick_update)
                     corehub.client.on('updateSummaryState', self._on_ticker_update)
-                    conn.wait(20)
+                    conn.wait(120)
 
                     # When we purposely close the connection, the script will exit conn.wait()
                     # so we need to inform the script that it should not try to reconnect.
@@ -307,17 +311,22 @@ class BittrexSocket(WebSocket):
                         return
                 except HTTPError:
                     logger.error('Failed to establish connection through {}'.format(conn.url))
-                    url = get_url(url_gen)
+                    url = get_url(urls)
                 except MissingSchema:
                     logger.error('Invalid URL: {}'.format(conn.url))
-                    url = get_url(url_gen)
+                    url = get_url(urls)
                 except WebSocketConnectionClosedException:
                     print('Init_connection_WebSocketConnectionClosedException')
                 except SocketError:
                     logger.error(
                         'Connection timeout for connection {}. Please check your internet connection is on.'.format(
                             conn.url))
-                    url = get_url(url_gen)
+                    url = get_url(urls)
+                except:
+                    e = sys.exc_info()[0]
+                    logger.error('Something wicked happened: ' + str(sys.exc_info()[0]))
+                    logger.error('URL: ' + url)
+                    sleep(20)
             except StopIteration:
                 logger.error('Failed to establish connection to Bittrex through all supplied URLS. Closing the socket.')
                 return
