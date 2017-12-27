@@ -22,6 +22,7 @@ from ._auxiliary import BittrexConnection
 from ._logger import add_stream_logger, remove_stream_logger
 from ._queue_events import *
 from .constants import *
+import sys
 
 logger = logging.getLogger(__name__)
 
