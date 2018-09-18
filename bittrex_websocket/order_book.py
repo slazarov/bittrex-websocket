@@ -6,7 +6,6 @@
 
 from bittrex_websocket.websocket_client import BittrexSocket
 from bittrex_websocket.constants import BittrexMethods
-from ._queue_events import ConfirmEvent, SyncEvent
 import logging
 from .constants import EventTypes
 from collections import deque
@@ -102,7 +101,7 @@ class OrderBook(BittrexSocket):
             self.order_books[ticker]['N'] = order_data['N']
             # Start syncing
             for side in [['Z', True], ['S', False]]:
-                made_change = False
+                new_orders_inserted = False
                 for item in order_data[side[0]]:
                     # TYPE 0: New order entries at matching price
                     # -> ADD to order book
@@ -112,16 +111,14 @@ class OrderBook(BittrexSocket):
                                 'Q': item['Q'],
                                 'R': item['R']
                             })
-                        made_change = True
+                        new_orders_inserted = True
 
                     # TYPE 1: Cancelled / filled order entries at matching price
                     # -> DELETE from the order book
                     elif item['TY'] == 1:
-                        for i, existing_order in enumerate(
-                                self.order_books[ticker][side[0]]):
+                        for i, existing_order in enumerate(self.order_books[ticker][side[0]]):
                             if existing_order['R'] == item['R']:
                                 del self.order_books[ticker][side[0]][i]
-                                # made_change = True
                                 break
 
                     # TYPE 2: Changed order entries at matching price (partial fills, cancellations)
@@ -130,17 +127,35 @@ class OrderBook(BittrexSocket):
                         for existing_order in self.order_books[ticker][side[0]]:
                             if existing_order['R'] == item['R']:
                                 existing_order['Q'] = item['Q']
-                                # made_change = True
                                 break
 
-                if made_change:
+                if new_orders_inserted:
                     # Sort by price, with respect to BUY(desc) or SELL(asc)
                     self.order_books[ticker][side[0]] = sorted(
                         self.order_books[ticker][side[0]], key=lambda k: k['R'], reverse=side[1])
                     # Add nounce unix timestamp
                     self.order_books[ticker]['timestamp'] = time()
+
+                new_completed_orders_count = len(order_data['f'])
+                
+                if new_completed_orders_count != 0:
+                    #saving at least 20 min trade history; 20 mins in mils;
+                    if order_data['f'][0]['T'] - self.order_books[ticker]['f'][-new_completed_orders_count]['T'] > 20*60*1000:  
+                        del self.order_books[ticker]['f'][-min(new_completed_orders_count, len(self.order_books[ticker]['f'])):]
+
+                    #if history has data aged more thatn 120 mins delte all data upon 30 minutes history                        
+                    for i in range(len(self.order_books[ticker]['f'])):
+                        if order_data['f'][0]['T'] - self.order_books[ticker]['f'][-new_completed_orders_count]['T'] >= 120*60*1000: 
+                                if self.order_books[ticker]['f'][i]['T'] > 30*60*1000:
+                                    del self.order_books[ticker]['f'][-i:]    
+                                    break
+
+                    for new_completed_order in reversed(order_data['f']):
+                        self.order_books[ticker]['f'].insert(0, new_completed_order)
+
             self._on_ping.on_change(ticker)
             return True
+
         # The next nounce will trigger a sync.
         elif nounce_diff == 0:
             return True
