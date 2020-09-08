@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 install_requires = \
     [
-        'requests[security]==2.20.0',
+        'requests[security]>=2.20.0,<3.0.0',
         'Events==0.3',
         'websocket-client>=0.53.0',
         'signalr-client-threads'
